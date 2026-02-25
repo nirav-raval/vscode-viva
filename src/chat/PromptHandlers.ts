@@ -14,16 +14,7 @@ export class PromptHandlers {
 
   public static async handle(request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<any> {
     stream.progress(PromptHandlers.getRandomProgressMessage());
-    const chatCommand = (request.command && ['new', 'info'].indexOf(request.command.toLowerCase()) > -1) ? request.command.toLowerCase() : '';
-
-    if (chatCommand === 'info') {
-      const authInstance = AuthProvider.getInstance();
-      const account = await authInstance.getAccount();
-      if (!account) {
-        stream.markdown('\n\n The `/info` command is only available when you are signed in. Please sign in first.');
-        return;
-      }
-    }
+    const chatCommand = (request.command && ['new'].indexOf(request.command.toLowerCase()) > -1) ? request.command.toLowerCase() : '';
 
     const messages: vscode.LanguageModelChatMessage[] = [];
     messages.push(vscode.LanguageModelChatMessage.Assistant(promptContext));
@@ -49,32 +40,6 @@ export class PromptHandlers {
       }
       PromptHandlers.history.push(query);
       PromptHandlers.getChatCommandButtons(chatCommand, query).forEach(button => stream.button(button));
-
-      if (chatCommand === 'info') {
-        try {
-          const data = await PromptHandlers.tryToGetDataFromSharePoint(query);
-          if (data) {
-            stream.markdown('\n\nThis is what I found...\n\n');
-            const explanationResponse = await PromptHandlers.explainOverSharePointData(data, token);
-            let explanationQuery = '';
-            for await (const fragment of explanationResponse.text) {
-              explanationQuery += fragment;
-              stream.markdown(fragment);
-            }
-            PromptHandlers.history.push(explanationQuery);
-          }
-        } catch (err: any) {
-          Logger.getInstance();
-          const errorText = err!.error ? err!.error.message.toString() : err.toString();
-          Logger.error(errorText);
-          stream.markdown('\n\nI was not able to retrieve the data from SharePoint. Please check the logs in output window for more information.');
-
-          const markdownString = new vscode.MarkdownString();
-          markdownString.supportHtml = true;
-          markdownString.appendMarkdown(`<span style="color:#f00;">${errorText}</span>`);
-          stream.markdown(markdownString);
-        }
-      }
 
       return { metadata: { command: chatCommand } };
     } catch (err) {
@@ -122,12 +87,7 @@ export class PromptHandlers {
         context += `\n Here is some more information regarding each component type ${JSON.stringify(ComponentTypes)}`;
         context += `\n Here is some more information regarding each extension type ${JSON.stringify(ExtensionTypes)}`;
         context += `\n Here is some more information regarding each ACE type ${JSON.stringify(AdaptiveCardTypes)}`;
-      case 'info':
-        // TODO: since we are already retrieving list of sites app catalog we could add it as additional context here
-        context += promptInfoContext;
-        if (EnvironmentInformation.tenantUrl) {
-          context += `Tenant SharePoint URL is: ${EnvironmentInformation.tenantUrl}`;
-        }
+
       default:
         context += promptGeneralContext;
     }
